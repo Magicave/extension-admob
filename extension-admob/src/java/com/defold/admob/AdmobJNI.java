@@ -47,6 +47,9 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoadCallback;
 
+import com.google.android.gms.ads.OnPaidEventListener;
+import com.google.android.gms.ads.AdValue;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONException;
@@ -81,6 +84,8 @@ public class AdmobJNI implements LifecycleObserver {
   private static final int EVENT_IMPRESSION_RECORDED =12;
   // 13-16 are for iOS only
   private static final int EVENT_NOT_SUPPORTED =      17;
+  
+  private static final int EVENT_PAID_EVENT =         18;
 
   private static final int SIZE_ADAPTIVE_BANNER =     0;
   private static final int SIZE_BANNER =              1;
@@ -258,6 +263,29 @@ public class AdmobJNI implements LifecycleObserver {
     admobAddToQueue(msg, message);
   }
 
+  private void sendPaidEventMessage(int msg, AdValue adValue) {
+      Log.d(TAG, "AdMobJNI: admanager sending paid event! Micros: " + adValue.getValueMicros());
+
+      String message = null;
+      try {
+          JSONObject obj = new JSONObject();
+          // Use the new integer constant
+          obj.put("event", EVENT_PAID_EVENT);
+          // Add string event_type for easier parsing in Lua if needed
+          obj.put("event_type", "paid_event");
+          
+          // Ad Revenue Data
+          obj.put("value_micros", adValue.getValueMicros());
+          obj.put("currency", adValue.getCurrencyCode());
+          obj.put("precision", adValue.getPrecisionType());
+          
+          message = obj.toString();
+      } catch (JSONException e) {
+          message = getJsonConversionErrorMessage(e.getLocalizedMessage());
+      }
+      admobAddToQueue(msg, message);
+  }
+
   private AdRequest createAdRequest() {
     return new AdRequest.Builder().setRequestAgent(defoldUserAgent).build();
   }
@@ -384,8 +412,17 @@ public class AdmobJNI implements LifecycleObserver {
         public void onAdLoaded(AppOpenAd ad) {
           // Called when an app open ad has loaded.
           Log.d(TAG, "Ad was loaded.");
-          sendSimpleMessage(MSG_APPOPEN, EVENT_LOADED);
           mAppOpenAd = ad;
+          
+          // Attach paid event listener
+          mAppOpenAd.setOnPaidEventListener(new OnPaidEventListener() {
+              @Override
+              public void onPaidEvent(AdValue adValue) {
+                  sendPaidEventMessage(MSG_APPOPEN, adValue);
+              }
+          });
+          
+          sendSimpleMessage(MSG_APPOPEN, EVENT_LOADED);
           mIsLoadingAppOpenAd = false;
           if (showImmediately) {
             showAppOpen();
@@ -426,6 +463,15 @@ public class AdmobJNI implements LifecycleObserver {
                   // an ad is loaded.
                   // Log.d(TAG, "onAdLoaded");
                    mInterstitialAd = interstitialAd;
+                   
+                   // Attach paid event listener
+                   mInterstitialAd.setOnPaidEventListener(new OnPaidEventListener() {
+                       @Override
+                       public void onPaidEvent(AdValue adValue) {
+                           sendPaidEventMessage(MSG_INTERSTITIAL, adValue);
+                       }
+                   });
+
                    sendSimpleMessage(MSG_INTERSTITIAL, EVENT_LOADED);
                    mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback(){
                       @Override
@@ -472,7 +518,7 @@ public class AdmobJNI implements LifecycleObserver {
                   // Log.d(TAG, loadAdError.getMessage());
                    mInterstitialAd = null;
                    sendSimpleMessage(MSG_INTERSTITIAL, EVENT_FAILED_TO_LOAD, "code", loadAdError.getCode(),
-                          "error", String.format("Error domain: \"%s\". %s", loadAdError.getDomain(), loadAdError.getMessage()));
+                           "error", String.format("Error domain: \"%s\". %s", loadAdError.getDomain(), loadAdError.getMessage()));
                 }
             });
           }
@@ -514,6 +560,15 @@ public class AdmobJNI implements LifecycleObserver {
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
               // Log.d(TAG, "onAdLoaded");
               mRewardedAd = rewardedAd;
+              
+              // Attach paid event listener
+              mRewardedAd.setOnPaidEventListener(new OnPaidEventListener() {
+                   @Override
+                   public void onPaidEvent(AdValue adValue) {
+                       sendPaidEventMessage(MSG_REWARDED, adValue);
+                   }
+               });
+              
               sendSimpleMessage(MSG_REWARDED, EVENT_LOADED);
               mRewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
@@ -613,6 +668,15 @@ public class AdmobJNI implements LifecycleObserver {
             public void onAdLoaded(@NonNull RewardedInterstitialAd rewardedAd) {
               // Log.d(TAG, "onAdLoaded");
               mRewardedInterstitialAd = rewardedAd;
+              
+              // Attach paid event listener
+              mRewardedInterstitialAd.setOnPaidEventListener(new OnPaidEventListener() {
+                   @Override
+                   public void onPaidEvent(AdValue adValue) {
+                       sendPaidEventMessage(MSG_REWARDED_INTERSTITIAL, adValue);
+                   }
+               });
+              
               sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_LOADED);
               mRewardedInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
@@ -721,6 +785,15 @@ public class AdmobJNI implements LifecycleObserver {
       @Override
       public void run() {
           AdRequest adRequest = createAdRequest();
+          
+          // Attach paid event listener
+          view.setOnPaidEventListener(new OnPaidEventListener() {
+              @Override
+              public void onPaidEvent(AdValue adValue) {
+                  sendPaidEventMessage(MSG_BANNER, adValue);
+              }
+          });
+          
           view.setAdListener(new AdListener() {
             @Override
             public void onAdLoaded() {

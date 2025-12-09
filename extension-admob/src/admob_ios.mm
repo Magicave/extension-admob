@@ -32,6 +32,8 @@ namespace dmAdmob {
 
     static const char* m_DefoldUserAgent = nil;
 
+    static const int EVENT_PAID_EVENT = 18;
+
     static UIViewController *uiViewController = nil;
     static AdMobAppDelegate *admobAppDelegate = nil;
 
@@ -90,6 +92,22 @@ namespace dmAdmob {
         [dict setObject:[NSNumber numberWithInt:event] forKey:@"event"];
         [dict setObject:[NSNumber numberWithInt:value_2] forKey:key_2];
         [dict setObject:[NSNumber numberWithInt:value_3] forKey:key_3];
+        SendSimpleMessage(msg, dict);
+    }
+
+    void SendPaidEventMessage(MessageId msg, GADAdValue *value) {
+        NSMutableDictionary *dict = [NSMutableDictionary dictionary];
+        [dict setObject:[NSNumber numberWithInt:EVENT_PAID_EVENT] forKey:@"event"];
+        [dict setObject:@"paid_event" forKey:@"event_type"];
+        
+        // iOS provides an NSDecimalNumber. We convert to double for Lua.
+        // The Lua script must handle the fact that Android sends "value_micros" and iOS sends "revenue_ios_double"
+        double revenue = [value.value doubleValue];
+        [dict setObject:[NSNumber numberWithDouble:revenue] forKey:@"revenue_ios_double"];
+        
+        [dict setObject:value.currencyCode forKey:@"currency"];
+        [dict setObject:[NSNumber numberWithInt:value.precision] forKey:@"precision"];
+        
         SendSimpleMessage(msg, dict);
     }
 
@@ -155,11 +173,18 @@ namespace dmAdmob {
                 if (error) {
                     SetAppOpenAd(nil);
                     NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
-                    SendSimpleMessage(MSG_APPOPEN, EVENT_FAILED_TO_LOAD, @"code", [error code],
+                    SendSimpleMessage(MSG_APPOPEN, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
                 }
+                
                 SetAppOpenAd(ad);
+                
+                // Attach paid event handler
+                appOpenAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
+                    SendPaidEventMessage(MSG_APPOPEN, value);
+                };
+                
                 SendSimpleMessage(MSG_APPOPEN, EVENT_LOADED);
                 if (showImmediately) {
                     ShowAppOpen();
@@ -189,7 +214,7 @@ namespace dmAdmob {
             [appOpenAd presentFromRootViewController:uiViewController];
         } else {
             if (error) {
-                SendSimpleMessage(MSG_APPOPEN, EVENT_NOT_LOADED, @"code", [error code],
+                SendSimpleMessage(MSG_APPOPEN, EVENT_NOT_LOADED, @"code", (int)[error code],
                       @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
             } else {
                 SendSimpleMessage(MSG_APPOPEN, EVENT_NOT_LOADED, @"error", @"Can't present App Open Ad");
@@ -225,11 +250,17 @@ namespace dmAdmob {
                 if (error) {
                     SetInterstitialAd(nil);
                     NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
-                    SendSimpleMessage(MSG_INTERSTITIAL, EVENT_FAILED_TO_LOAD, @"code", [error code],
+                    SendSimpleMessage(MSG_INTERSTITIAL, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
                 }
                 SetInterstitialAd(ad);
+                
+                // Attach paid event handler
+                interstitialAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
+                    SendPaidEventMessage(MSG_INTERSTITIAL, value);
+                };
+                
                 SendSimpleMessage(MSG_INTERSTITIAL, EVENT_LOADED);
             }];
     }
@@ -246,7 +277,7 @@ namespace dmAdmob {
                 [interstitialAd presentFromRootViewController:uiViewController];
             } else {
                 if (error) {
-                    SendSimpleMessage(MSG_INTERSTITIAL, EVENT_NOT_LOADED, @"code", [error code],
+                    SendSimpleMessage(MSG_INTERSTITIAL, EVENT_NOT_LOADED, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                 } else {
                     SendSimpleMessage(MSG_INTERSTITIAL, EVENT_NOT_LOADED, @"error", @"Can't present interstitial AD");
@@ -284,11 +315,17 @@ namespace dmAdmob {
                 if (error) {
                     SetRewardedAd(nil);
                     NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
-                    SendSimpleMessage(MSG_REWARDED, EVENT_FAILED_TO_LOAD, @"code", [error code],
+                    SendSimpleMessage(MSG_REWARDED, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
                 }
                 SetRewardedAd(ad);
+                
+                // Attach paid event handler
+                rewardedAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
+                    SendPaidEventMessage(MSG_REWARDED, value);
+                };
+                
                 SendSimpleMessage(MSG_REWARDED, EVENT_LOADED);
             }];
     }
@@ -309,7 +346,7 @@ namespace dmAdmob {
                         }];
             } else {
                 if (error) {
-                    SendSimpleMessage(MSG_REWARDED, EVENT_NOT_LOADED, @"code", [error code],
+                    SendSimpleMessage(MSG_REWARDED, EVENT_NOT_LOADED, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                 } else {
                     SendSimpleMessage(MSG_REWARDED, EVENT_NOT_LOADED, @"error", @"Can't present rewarded AD");
@@ -347,11 +384,17 @@ namespace dmAdmob {
                 if (error) {
                     SetRewardedInterstitialAd(nil);
                     NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
-                    SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_FAILED_TO_LOAD, @"code", [error code],
+                    SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
                 }
                 SetRewardedInterstitialAd(ad);
+                
+                // Attach paid event handler
+                rewardedInterstitialAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
+                    SendPaidEventMessage(MSG_REWARDED_INTERSTITIAL, value);
+                };
+                
                 SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_LOADED);
             }];
     }
@@ -372,7 +415,7 @@ namespace dmAdmob {
                         }];
             } else {
                 if (error) {
-                    SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_NOT_LOADED, @"code", [error code],
+                    SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_NOT_LOADED, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                 } else {
                     SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_NOT_LOADED, @"error", @"Can't present rewarded interstitial AD");
@@ -497,6 +540,12 @@ namespace dmAdmob {
         bannerAd.delegate = admobExtBannerAdDelegate;
         bannerAd.rootViewController = uiViewController;
         bannerAd.hidden = YES;
+        
+        // Attach paid event handler
+        bannerAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
+            SendPaidEventMessage(MSG_BANNER, value);
+        };
+        
         [uiViewController.view addSubview:bannerAd];
         [bannerAd loadRequest:createGADRequest()];
     }
@@ -644,7 +693,7 @@ void SetMaxAdContentRating(MaxAdRating max_ad_rating) {
     dmAdmob::isShowingAppOpenAd = false;
     dmAdmob::SetAppOpenAd(nil);
     dmAdmob::LoadAppOpen(dmAdmob::appOpenAdId, false);
-    dmAdmob::SendSimpleMessage(dmAdmob::MSG_APPOPEN, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", [error code],
+    dmAdmob::SendSimpleMessage(dmAdmob::MSG_APPOPEN, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", (int)[error code],
         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
 }
 
@@ -667,7 +716,7 @@ void SetMaxAdContentRating(MaxAdRating max_ad_rating) {
 
 - (void)ad:(id)ad didFailToPresentFullScreenContentWithError:(NSError *)error {
     dmAdmob::SetInterstitialAd(nil);
-    dmAdmob::SendSimpleMessage(dmAdmob::MSG_INTERSTITIAL, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", [error code],
+    dmAdmob::SendSimpleMessage(dmAdmob::MSG_INTERSTITIAL, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", (int)[error code],
         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
 }
 
@@ -694,7 +743,7 @@ void SetMaxAdContentRating(MaxAdRating max_ad_rating) {
 
 - (void)ad:(id)ad didFailToPresentFullScreenContentWithError:(NSError *)error {
     dmAdmob::SetRewardedAd(nil);
-    dmAdmob::SendSimpleMessage(dmAdmob::MSG_REWARDED, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", [error code],
+    dmAdmob::SendSimpleMessage(dmAdmob::MSG_REWARDED, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", (int)[error code],
         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
 }
 
@@ -720,7 +769,7 @@ void SetMaxAdContentRating(MaxAdRating max_ad_rating) {
 
 - (void)ad:(id)ad didFailToPresentFullScreenContentWithError:(NSError *)error {
     dmAdmob::SetRewardedInterstitialAd(nil);
-    dmAdmob::SendSimpleMessage(dmAdmob::MSG_REWARDED_INTERSTITIAL, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", [error code],
+    dmAdmob::SendSimpleMessage(dmAdmob::MSG_REWARDED_INTERSTITIAL, dmAdmob::EVENT_FAILED_TO_SHOW, @"code", (int)[error code],
         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
 }
 
@@ -751,7 +800,7 @@ void SetMaxAdContentRating(MaxAdRating max_ad_rating) {
 - (void)bannerView:(GADBannerView *)bannerView didFailToReceiveAdWithError:(NSError *)error {
     // Tells the delegate that an ad request failed.
     // The failure is normally due to network connectivity or ad availablility (i.e., no fill).
-    dmAdmob::SendSimpleMessage(dmAdmob::MSG_BANNER, dmAdmob::EVENT_FAILED_TO_LOAD, @"code", [error code],
+    dmAdmob::SendSimpleMessage(dmAdmob::MSG_BANNER, dmAdmob::EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
 }
 
