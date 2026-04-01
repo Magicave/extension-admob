@@ -2,7 +2,9 @@
 #define LIB_NAME "Admob"
 #define MODULE_NAME "admob"
 
+#ifndef DLIB_LOG_DOMAIN
 #define DLIB_LOG_DOMAIN LIB_NAME
+#endif
 #include <dmsdk/sdk.h>
 
 #if defined(DM_PLATFORM_ANDROID) || defined(DM_PLATFORM_IOS)
@@ -360,10 +362,12 @@ static dmExtension::Result UpdateAdmob(dmExtension::Params* params)
 
 static void OnEventAdmob(dmExtension::Params* params, const dmExtension::Event* event)
  {
-    switch(event->m_Event)
+    switch((int)event->m_Event)
     {
         case dmExtension::EVENT_ID_ACTIVATEAPP:
             ActivateApp();
+            break;
+        default:
             break;
     }
  }

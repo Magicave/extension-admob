@@ -31,7 +31,6 @@
 namespace dmAdmob {
 
     static const char* m_DefoldUserAgent = nil;
-    static const int EVENT_PAID_EVENT = 18;
 
     static UIViewController *uiViewController = nil;
     static AdMobAppDelegate *admobAppDelegate = nil;
@@ -165,7 +164,7 @@ namespace dmAdmob {
                 isLoadingAppOpenAd = false;
                 if (error) {
                     SetAppOpenAd(nil);
-                    NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
+                    NSLog(@"%@", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     SendSimpleMessage(MSG_APPOPEN, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
@@ -238,7 +237,7 @@ namespace dmAdmob {
             completionHandler:^(GADInterstitialAd *ad, NSError *error) {
                 if (error) {
                     SetInterstitialAd(nil);
-                    NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
+                    NSLog(@"%@", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     SendSimpleMessage(MSG_INTERSTITIAL, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
@@ -307,7 +306,7 @@ namespace dmAdmob {
             completionHandler:^(GADRewardedAd *ad, NSError *error) {
                 if (error) {
                     SetRewardedAd(nil);
-                    NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
+                    NSLog(@"%@", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     SendSimpleMessage(MSG_REWARDED, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
@@ -374,7 +373,7 @@ namespace dmAdmob {
             completionHandler:^(GADRewardedInterstitialAd *ad, NSError *error) {
                 if (error) {
                     SetRewardedInterstitialAd(nil);
-                    NSLog([NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
+                    NSLog(@"%@", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_FAILED_TO_LOAD, @"code", (int)[error code],
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
@@ -451,6 +450,8 @@ namespace dmAdmob {
         GADAdSize bannerSize = GetAdaptiveSize(); // SIZE_ADAPTIVE_BANNER
         //SIZE_FLUID, SIZE_SMART_BANNER are not available on iOS
         switch (bannerSizeConst) {
+          case SIZE_ADAPTIVE_BANNER:
+            break;
           case SIZE_LARGE_ADAPTIVE_BANNER:
             bannerSize = GetLargeAdaptiveSize();
             break;
@@ -469,7 +470,11 @@ namespace dmAdmob {
           case SIZE_MEDIUM_RECTANGLE:
             bannerSize = GADAdSizeMediumRectangle;
             break;
-          }
+          case SIZE_FLUID:
+          case SIZE_SMART_BANNER:
+          default:
+            break;
+        }
         return bannerSize;
     }
 
@@ -512,6 +517,8 @@ namespace dmAdmob {
 
         CGPoint bannerPos = CGPointMake(centerX, centerY);
         switch (bannerSizeConst) {
+            case POS_NONE:
+                break;
             case POS_TOP_LEFT:
                 bannerPos = CGPointMake(left, top);
             break;
@@ -532,6 +539,8 @@ namespace dmAdmob {
             break;
             case POS_CENTER:
                 bannerPos = CGPointMake(centerX, centerY);
+            break;
+            default:
             break;
         }
         bannerAd.center = bannerPos;
@@ -659,7 +668,7 @@ void ShowAdInspector() {
     [GADMobileAds.sharedInstance presentAdInspectorFromViewController:uiViewController completionHandler:^(NSError *error) { 
         // error will be non-nil if there was an issue and the inspector was not displayed. 
         if (error) {
-            dmLogInfo("AdInspector Error: %s", error);
+            dmLogInfo("AdInspector Error: %s", [[error localizedDescription] UTF8String]);
         }
     }];
 }
