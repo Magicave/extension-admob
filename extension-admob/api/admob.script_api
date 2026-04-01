@@ -58,8 +58,10 @@
                       `admob.EVENT_EARNED_REWARD`,
                       `admob.EVENT_COMPLETE`,
                       `admob.EVENT_CLICKED`,
-                      `admob.EVENT_DESTROYED`
-                      `admob.EVENT_JSON_ERROR`"
+                      `admob.EVENT_DESTROYED`,
+                      `admob.EVENT_IMPRESSION_RECORDED`,
+                      `admob.EVENT_JSON_ERROR`,
+                      `admob.EVENT_PAID_EVENT`"
 
               - name: code
                 type: number
@@ -70,6 +72,31 @@
                 type: string
                 optional: true
                 desc: The error message (if an error occurred or `nil` otherwise)
+
+              - name: event_type
+                type: string
+                optional: true
+                desc: Event subtype string. For ad revenue callbacks this is `"paid_event"`.
+
+              - name: value_micros
+                type: number
+                optional: true
+                desc: Android-only ad revenue value in micros for `admob.EVENT_PAID_EVENT`.
+
+              - name: revenue_ios_double
+                type: number
+                optional: true
+                desc: iOS-only ad revenue value for `admob.EVENT_PAID_EVENT`.
+
+              - name: currency
+                type: string
+                optional: true
+                desc: ISO currency code for `admob.EVENT_PAID_EVENT`.
+
+              - name: precision
+                type: number
+                optional: true
+                desc: SDK precision value for `admob.EVENT_PAID_EVENT`.
 
     examples:
       - desc: |-
@@ -109,6 +136,8 @@
                             print("EVENT_NOT_LOADED: can't call show_interstitial() before EVENT_LOADED\nError: "..message.error)
                         elseif message.event == admob.EVENT_IMPRESSION_RECORDED then
                             print("EVENT_IMPRESSION_RECORDED: Interstitial did record impression")
+                        elseif message.event == admob.EVENT_PAID_EVENT then
+                            print("EVENT_PAID_EVENT: Interstitial revenue event")
                         elseif message.event == admob.EVENT_JSON_ERROR then
                             print("EVENT_JSON_ERROR: Internal NE json error: "..message.error)
                         end
@@ -129,6 +158,8 @@
                             print("EVENT_EARNED_REWARD: Reward: " .. tostring(message.amount) .. " " .. tostring(message.type))
                         elseif message.event == admob.EVENT_IMPRESSION_RECORDED then
                             print("EVENT_IMPRESSION_RECORDED: Rewarded did record impression")
+                        elseif message.event == admob.EVENT_PAID_EVENT then
+                            print("EVENT_PAID_EVENT: Rewarded revenue event")
                         elseif message.event == admob.EVENT_JSON_ERROR then
                             print("EVENT_JSON_ERROR: Internal NE json error: "..message.error)
                         end
@@ -147,6 +178,8 @@
                             print("EVENT_DESTROYED: Banner AD destroyed")
                         elseif message.event == admob.EVENT_IMPRESSION_RECORDED then
                             print("EVENT_IMPRESSION_RECORDED: Banner did record impression")
+                        elseif message.event == admob.EVENT_PAID_EVENT then
+                            print("EVENT_PAID_EVENT: Banner revenue event")
                         elseif message.event == admob.EVENT_JSON_ERROR then
                             print("EVENT_JSON_ERROR: Internal NE json error: "..message.error)
                         end
@@ -306,6 +339,22 @@
             Original docs
             [Android](https://developers.google.com/admob/android/rewarded-fullscreen),
             [iOS](https://developers.google.com/admob/ios/rewarded-ads)
+    - name: options
+      type: table
+      optional: true
+      desc: ServerSideVerificationOptions
+            [Android](https://developers.google.com/admob/android/rewarded#validate-ssv),
+            [iOS](https://developers.google.com/admob/ios/rewarded#validate-ssv)
+      fields:
+          - name: user_id
+            type: string
+            optional: true
+            desc: A unique identifier assigned to each user.
+          - name: custom_data 
+            type: string
+            optional: true
+            desc: Custom Data attached to server-side reward callbacks. 
+
 
 #*****************************************************************************************************
 
@@ -414,7 +463,8 @@
             `admob.SIZE_LARGE_BANNER`,
             `admob.SIZE_LEADEARBOARD`,
             `admob.SIZE_MEDIUM_RECTANGLE`,
-            `admob.SIZE_SMART_BANNER`.
+            `admob.SIZE_SMART_BANNER`,
+            `admob.SIZE_LARGE_ADAPTIVE_BANNER`
             Original docs
             [Android](https://developers.google.com/admob/android/banner#banner_sizes),
             [iOS](https://developers.google.com/admob/ios/banner#banner_sizes)"
@@ -581,9 +631,15 @@
   - name: EVENT_NOT_SUPPORTED
     type: number
 
+  - name: EVENT_PAID_EVENT
+    type: number
+
 #*****************************************************************************************************
 
   - name: SIZE_ADAPTIVE_BANNER
+    type: number
+
+  - name: SIZE_LARGE_ADAPTIVE_BANNER
     type: number
 
   - name: SIZE_BANNER

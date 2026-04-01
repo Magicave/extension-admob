@@ -19,7 +19,8 @@ enum BannerSize
     SIZE_LARGE_BANNER =     4,
     SIZE_LEADEARBOARD =     5,
     SIZE_MEDIUM_RECTANGLE = 6,
-    SIZE_SMART_BANNER =     9
+    SIZE_SMART_BANNER =     9,
+    SIZE_LARGE_ADAPTIVE_BANNER = 10
 };
 
 enum BannerPosition
@@ -50,7 +51,7 @@ void LoadAppOpen(const char* unitId, bool showImmediately);
 void ShowAppOpen();
 void LoadInterstitial(const char* unitId);
 void ShowInterstitial();
-void LoadRewarded(const char* unitId);
+void LoadRewarded(const char* unitId, const char* userId,  const char* customData);
 void ShowRewarded();
 void LoadRewardedInterstitial(const char* unitId);
 void ShowRewardedInterstitial();

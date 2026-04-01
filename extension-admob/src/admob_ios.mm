@@ -31,7 +31,6 @@
 namespace dmAdmob {
 
     static const char* m_DefoldUserAgent = nil;
-
     static const int EVENT_PAID_EVENT = 18;
 
     static UIViewController *uiViewController = nil;
@@ -99,15 +98,9 @@ namespace dmAdmob {
         NSMutableDictionary *dict = [NSMutableDictionary dictionary];
         [dict setObject:[NSNumber numberWithInt:EVENT_PAID_EVENT] forKey:@"event"];
         [dict setObject:@"paid_event" forKey:@"event_type"];
-        
-        // iOS provides an NSDecimalNumber. We convert to double for Lua.
-        // The Lua script must handle the fact that Android sends "value_micros" and iOS sends "revenue_ios_double"
-        double revenue = [value.value doubleValue];
-        [dict setObject:[NSNumber numberWithDouble:revenue] forKey:@"revenue_ios_double"];
-        
+        [dict setObject:[NSNumber numberWithDouble:[value.value doubleValue]] forKey:@"revenue_ios_double"];
         [dict setObject:value.currencyCode forKey:@"currency"];
         [dict setObject:[NSNumber numberWithInt:value.precision] forKey:@"precision"];
-        
         SendSimpleMessage(msg, dict);
     }
 
@@ -177,14 +170,10 @@ namespace dmAdmob {
                         @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
                 }
-                
                 SetAppOpenAd(ad);
-                
-                // Attach paid event handler
                 appOpenAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
                     SendPaidEventMessage(MSG_APPOPEN, value);
                 };
-                
                 SendSimpleMessage(MSG_APPOPEN, EVENT_LOADED);
                 if (showImmediately) {
                     ShowAppOpen();
@@ -255,12 +244,9 @@ namespace dmAdmob {
                     return;
                 }
                 SetInterstitialAd(ad);
-                
-                // Attach paid event handler
                 interstitialAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
                     SendPaidEventMessage(MSG_INTERSTITIAL, value);
                 };
-                
                 SendSimpleMessage(MSG_INTERSTITIAL, EVENT_LOADED);
             }];
     }
@@ -307,7 +293,14 @@ namespace dmAdmob {
         rewardedAd = newAd;
     }
 
-    void LoadRewarded(const char* unitId) {
+    void LoadRewarded(const char* unitId, const char* userId, const char* customData) {
+        GADServerSideVerificationOptions *ssvOptions = [[GADServerSideVerificationOptions alloc] init];
+        if (userId) {
+            ssvOptions.userIdentifier = [NSString stringWithUTF8String:userId];
+        }
+        if (customData) {
+            ssvOptions.customRewardString = [NSString stringWithUTF8String:customData];
+        }
         [GADRewardedAd
             loadWithAdUnitID:[NSString stringWithUTF8String:unitId]
             request:createGADRequest()
@@ -319,13 +312,11 @@ namespace dmAdmob {
                           @"error", [NSString stringWithFormat:@"Error domain: \"%@\". %@", [error domain], [error localizedDescription]]);
                     return;
                 }
+                ad.serverSideVerificationOptions = ssvOptions;
                 SetRewardedAd(ad);
-                
-                // Attach paid event handler
                 rewardedAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
                     SendPaidEventMessage(MSG_REWARDED, value);
                 };
-                
                 SendSimpleMessage(MSG_REWARDED, EVENT_LOADED);
             }];
     }
@@ -389,12 +380,9 @@ namespace dmAdmob {
                     return;
                 }
                 SetRewardedInterstitialAd(ad);
-                
-                // Attach paid event handler
                 rewardedInterstitialAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
                     SendPaidEventMessage(MSG_REWARDED_INTERSTITIAL, value);
                 };
-                
                 SendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_LOADED);
             }];
     }
@@ -435,22 +423,37 @@ namespace dmAdmob {
     static AdmobExtBannerAdDelegate *admobExtBannerAdDelegate;
     static BannerPosition lastBannerPos = POS_NONE;
 
-    GADAdSize GetAdaptiveSize() {
+    CGFloat GetAdaptiveWidth() {
         UIView *defoldView = uiViewController.view;
-        CGRect frame = defoldView.frame;
+        CGRect bounds = defoldView.bounds;
 
         if (@available(iOS 11.0, *)) {
-            frame = UIEdgeInsetsInsetRect(defoldView.frame, defoldView.safeAreaInsets);
+            CGRect safeAreaFrame = defoldView.safeAreaLayoutGuide.layoutFrame;
+            if (!CGSizeEqualToSize(CGSizeZero, safeAreaFrame.size)) {
+                bounds = safeAreaFrame;
+            }
         }
 
-        CGFloat viewWidth = frame.size.width;
+        return CGRectGetWidth(bounds);
+    }
+
+    GADAdSize GetAdaptiveSize() {
+        CGFloat viewWidth = GetAdaptiveWidth();
         return GADCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(viewWidth);
+    }
+
+    GADAdSize GetLargeAdaptiveSize() {
+        CGFloat viewWidth = GetAdaptiveWidth();
+        return GADLargeAnchoredAdaptiveBannerAdSizeWithWidth(viewWidth);
     }
 
     GADAdSize GetSizeConstant(BannerSize bannerSizeConst) {
         GADAdSize bannerSize = GetAdaptiveSize(); // SIZE_ADAPTIVE_BANNER
         //SIZE_FLUID, SIZE_SMART_BANNER are not available on iOS
         switch (bannerSizeConst) {
+          case SIZE_LARGE_ADAPTIVE_BANNER:
+            bannerSize = GetLargeAdaptiveSize();
+            break;
           case SIZE_BANNER:
             bannerSize = GADAdSizeBanner;
             break;
@@ -484,16 +487,27 @@ namespace dmAdmob {
         CGFloat bottom = CGRectGetMaxY(bounds) - CGRectGetMidY(bannerAd.bounds);
         CGFloat centerY = CGRectGetMidY(bounds);
 
-        if (CGRectGetHeight(bannerAd.bounds) >= CGRectGetHeight(defoldView.bounds)) {
-            top = CGRectGetMidY(defoldView.bounds);
+        if (CGRectGetHeight(bannerAd.bounds) >= CGRectGetHeight(bounds)) {
+            top = centerY;
+            bottom = centerY;
         }
 
         CGFloat left = CGRectGetMinX(bounds) + CGRectGetMidX(bannerAd.bounds);
         CGFloat right = CGRectGetMaxX(bounds) - CGRectGetMidX(bannerAd.bounds);
         CGFloat centerX = CGRectGetMidX(bounds);
 
-        if (CGRectGetWidth(bannerAd.bounds) >= CGRectGetWidth(defoldView.bounds)) {
-            left = CGRectGetMidX(defoldView.bounds);
+        if (CGRectGetWidth(bannerAd.bounds) >= CGRectGetWidth(bounds)) {
+            left = centerX;
+            right = centerX;
+        }
+
+        if (left > right) {
+            left = centerX;
+            right = centerX;
+        }
+        if (top > bottom) {
+            top = centerY;
+            bottom = centerY;
         }
 
         CGPoint bannerPos = CGPointMake(centerX, centerY);
@@ -540,12 +554,9 @@ namespace dmAdmob {
         bannerAd.delegate = admobExtBannerAdDelegate;
         bannerAd.rootViewController = uiViewController;
         bannerAd.hidden = YES;
-        
-        // Attach paid event handler
         bannerAd.paidEventHandler = ^(GADAdValue * _Nonnull value) {
             SendPaidEventMessage(MSG_BANNER, value);
         };
-        
         [uiViewController.view addSubview:bannerAd];
         [bannerAd loadRequest:createGADRequest()];
     }
