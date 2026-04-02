@@ -36,6 +36,7 @@ import com.google.android.gms.ads.AdInspectorError;
 import com.google.android.gms.ads.OnAdInspectorClosedListener;
 import com.google.android.gms.ads.OnPaidEventListener;
 import com.google.android.gms.ads.RequestConfiguration;
+import com.google.android.gms.ads.ResponseInfo;
 import com.google.android.gms.ads.AdValue;
 import com.google.android.gms.ads.initialization.AdapterStatus;
 import com.google.android.gms.ads.initialization.InitializationStatus;
@@ -221,6 +222,58 @@ public class AdmobJNI implements LifecycleObserver {
     }
   }
 
+  private String normalizeAdNetworkId(String adapterClass) {
+    if (adapterClass == null || adapterClass.length() == 0) {
+      return null;
+    }
+
+    String lower = adapterClass.toLowerCase();
+    if (lower.contains(".unity.") || lower.contains("unitymediationadapter") || lower.contains("unityadapter") || lower.contains("unityads")) {
+      return "unity";
+    }
+    if (lower.contains(".admob.") || lower.endsWith(".mobileads") || lower.contains("admobadapter")) {
+      return "googleadmob";
+    }
+    return adapterClass;
+  }
+
+  private String getWinningAdapterClass(ResponseInfo responseInfo) {
+    if (responseInfo == null) {
+      return null;
+    }
+
+    String adapterClass = responseInfo.getMediationAdapterClassName();
+    if (adapterClass == null || adapterClass.length() == 0) {
+      return null;
+    }
+
+    return adapterClass;
+  }
+
+  private void logWinningAdapter(String context, ResponseInfo responseInfo) {
+    String adapterClass = getWinningAdapterClass(responseInfo);
+    if (adapterClass == null) {
+      Log.d(TAG, context + " winner adapter: <none>");
+      return;
+    }
+
+    Log.d(
+        TAG,
+        String.format(
+            "%s winner adapter: %s, network: %s",
+            context, adapterClass, normalizeAdNetworkId(adapterClass)));
+  }
+
+  private void putAdNetworkFields(JSONObject obj, ResponseInfo responseInfo) throws JSONException {
+    String adapterClass = getWinningAdapterClass(responseInfo);
+    if (adapterClass == null) {
+      return;
+    }
+
+    obj.put("ad_network_adapter", adapterClass);
+    obj.put("ad_network_id", normalizeAdNetworkId(adapterClass));
+  }
+
   public void setPrivacySettings(boolean enable_rdp) {
     SharedPreferences sharedPref = activity.getPreferences(Context.MODE_PRIVATE);
     SharedPreferences.Editor editor = sharedPref.edit();
@@ -300,6 +353,19 @@ public class AdmobJNI implements LifecycleObserver {
       admobAddToQueue(msg, message);
   }
 
+  private void sendSimpleMessage(int msg, int eventId, ResponseInfo responseInfo) {
+      String message = null;
+      try {
+          JSONObject obj = new JSONObject();
+          obj.put("event", eventId);
+          putAdNetworkFields(obj, responseInfo);
+          message = obj.toString();
+      } catch (JSONException e) {
+          message = getJsonConversionErrorMessage(e.getLocalizedMessage());
+      }
+      admobAddToQueue(msg, message);
+  }
+
   private void sendSimpleMessage(int msg, int eventId, String key_2, String value_2) {
       String message = null;
       try {
@@ -341,7 +407,7 @@ public class AdmobJNI implements LifecycleObserver {
     admobAddToQueue(msg, message);
   }
 
-  private void sendPaidEventMessage(int msg, AdValue adValue) {
+  private void sendPaidEventMessage(int msg, AdValue adValue, ResponseInfo responseInfo) {
     String message = null;
     try {
       JSONObject obj = new JSONObject();
@@ -350,6 +416,7 @@ public class AdmobJNI implements LifecycleObserver {
       obj.put("value_micros", adValue.getValueMicros());
       obj.put("currency", adValue.getCurrencyCode());
       obj.put("precision", adValue.getPrecisionType());
+      putAdNetworkFields(obj, responseInfo);
       message = obj.toString();
     } catch (JSONException e) {
       message = getJsonConversionErrorMessage(e.getLocalizedMessage());
@@ -436,17 +503,18 @@ public class AdmobJNI implements LifecycleObserver {
               public void onAdShowedFullScreenContent() {
                 // Called when fullscreen content is shown.
                 Log.d(TAG, "Ad showed fullscreen content.");
-                sendSimpleMessage(MSG_APPOPEN, EVENT_OPENING);
+                logWinningAdapter("App Open showed", mAppOpenAd.getResponseInfo());
+                sendSimpleMessage(MSG_APPOPEN, EVENT_OPENING, mAppOpenAd.getResponseInfo());
               }
 
               @Override
               public void onAdImpression() {
-                sendSimpleMessage(MSG_APPOPEN, EVENT_IMPRESSION_RECORDED);
+                sendSimpleMessage(MSG_APPOPEN, EVENT_IMPRESSION_RECORDED, mAppOpenAd.getResponseInfo());
               }
 
               @Override
               public void onAdClicked() {
-                sendSimpleMessage(MSG_APPOPEN, EVENT_CLICKED);
+                sendSimpleMessage(MSG_APPOPEN, EVENT_CLICKED, mAppOpenAd.getResponseInfo());
               }
             });
         mAppOpenAd.show(activity);
@@ -484,13 +552,14 @@ public class AdmobJNI implements LifecycleObserver {
           // Called when an app open ad has loaded.
           Log.d(TAG, "Ad was loaded.");
           mAppOpenAd = ad;
+          logWinningAdapter("App Open loaded", ad.getResponseInfo());
           mAppOpenAd.setOnPaidEventListener(new OnPaidEventListener() {
             @Override
             public void onPaidEvent(AdValue adValue) {
-              sendPaidEventMessage(MSG_APPOPEN, adValue);
+              sendPaidEventMessage(MSG_APPOPEN, adValue, ad.getResponseInfo());
             }
           });
-          sendSimpleMessage(MSG_APPOPEN, EVENT_LOADED);
+          sendSimpleMessage(MSG_APPOPEN, EVENT_LOADED, ad.getResponseInfo());
           mIsLoadingAppOpenAd = false;
           if (showImmediately) {
             showAppOpen();
@@ -531,13 +600,14 @@ public class AdmobJNI implements LifecycleObserver {
                   // an ad is loaded.
                   // Log.d(TAG, "onAdLoaded");
                    mInterstitialAd = interstitialAd;
+                   logWinningAdapter("Interstitial loaded", interstitialAd.getResponseInfo());
                    mInterstitialAd.setOnPaidEventListener(new OnPaidEventListener() {
                       @Override
                       public void onPaidEvent(AdValue adValue) {
-                        sendPaidEventMessage(MSG_INTERSTITIAL, adValue);
+                        sendPaidEventMessage(MSG_INTERSTITIAL, adValue, interstitialAd.getResponseInfo());
                       }
                     });
-                   sendSimpleMessage(MSG_INTERSTITIAL, EVENT_LOADED);
+                   sendSimpleMessage(MSG_INTERSTITIAL, EVENT_LOADED, interstitialAd.getResponseInfo());
                    mInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback(){
                       @Override
                       public void onAdDismissedFullScreenContent() {
@@ -562,17 +632,18 @@ public class AdmobJNI implements LifecycleObserver {
                         // show it a second time.
                         // Log.d(TAG, "The ad was shown.");
                         mInterstitialAd = null;
-                        sendSimpleMessage(MSG_INTERSTITIAL, EVENT_OPENING);
+                        logWinningAdapter("Interstitial showed", interstitialAd.getResponseInfo());
+                        sendSimpleMessage(MSG_INTERSTITIAL, EVENT_OPENING, interstitialAd.getResponseInfo());
                       }
 
                       @Override
                       public void onAdImpression() {
-                        sendSimpleMessage(MSG_INTERSTITIAL, EVENT_IMPRESSION_RECORDED);
+                        sendSimpleMessage(MSG_INTERSTITIAL, EVENT_IMPRESSION_RECORDED, interstitialAd.getResponseInfo());
                       }
 
                       @Override
                       public void onAdClicked() {
-                        sendSimpleMessage(MSG_INTERSTITIAL, EVENT_CLICKED);
+                        sendSimpleMessage(MSG_INTERSTITIAL, EVENT_CLICKED, interstitialAd.getResponseInfo());
                       }
                     });
                 }
@@ -633,13 +704,14 @@ public class AdmobJNI implements LifecycleObserver {
             public void onAdLoaded(@NonNull RewardedAd rewardedAd) {
               // Log.d(TAG, "onAdLoaded");
               mRewardedAd = rewardedAd;
+              logWinningAdapter("Rewarded loaded", rewardedAd.getResponseInfo());
               mRewardedAd.setOnPaidEventListener(new OnPaidEventListener() {
                 @Override
                 public void onPaidEvent(AdValue adValue) {
-                  sendPaidEventMessage(MSG_REWARDED, adValue);
+                  sendPaidEventMessage(MSG_REWARDED, adValue, rewardedAd.getResponseInfo());
                 }
               });
-              sendSimpleMessage(MSG_REWARDED, EVENT_LOADED);
+              sendSimpleMessage(MSG_REWARDED, EVENT_LOADED, rewardedAd.getResponseInfo());
               setRewardedCustomData(userId, customData);
               mRewardedAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
@@ -666,17 +738,18 @@ public class AdmobJNI implements LifecycleObserver {
                   // Called when ad is shown.
                   // Log.d(TAG, "Ad was shown.");
                   mRewardedAd = null;
-                  sendSimpleMessage(MSG_REWARDED, EVENT_OPENING);
+                  logWinningAdapter("Rewarded showed", rewardedAd.getResponseInfo());
+                  sendSimpleMessage(MSG_REWARDED, EVENT_OPENING, rewardedAd.getResponseInfo());
                 }
 
                 @Override
                 public void onAdImpression() {
-                  sendSimpleMessage(MSG_REWARDED, EVENT_IMPRESSION_RECORDED);
+                  sendSimpleMessage(MSG_REWARDED, EVENT_IMPRESSION_RECORDED, rewardedAd.getResponseInfo());
                 }
 
                 @Override
                 public void onAdClicked() {
-                  sendSimpleMessage(MSG_REWARDED, EVENT_CLICKED);
+                  sendSimpleMessage(MSG_REWARDED, EVENT_CLICKED, rewardedAd.getResponseInfo());
                 }
 
               });
@@ -739,13 +812,14 @@ public class AdmobJNI implements LifecycleObserver {
             public void onAdLoaded(@NonNull RewardedInterstitialAd rewardedAd) {
               // Log.d(TAG, "onAdLoaded");
               mRewardedInterstitialAd = rewardedAd;
+              logWinningAdapter("Rewarded Interstitial loaded", rewardedAd.getResponseInfo());
               mRewardedInterstitialAd.setOnPaidEventListener(new OnPaidEventListener() {
                 @Override
                 public void onPaidEvent(AdValue adValue) {
-                  sendPaidEventMessage(MSG_REWARDED_INTERSTITIAL, adValue);
+                  sendPaidEventMessage(MSG_REWARDED_INTERSTITIAL, adValue, rewardedAd.getResponseInfo());
                 }
               });
-              sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_LOADED);
+              sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_LOADED, rewardedAd.getResponseInfo());
               mRewardedInterstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
                 @Override
                 public void onAdDismissedFullScreenContent() {
@@ -771,17 +845,18 @@ public class AdmobJNI implements LifecycleObserver {
                   // Called when ad is shown.
                   // Log.d(TAG, "Ad was shown.");
                   mRewardedInterstitialAd = null;
-                  sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_OPENING);
+                  logWinningAdapter("Rewarded Interstitial showed", rewardedAd.getResponseInfo());
+                  sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_OPENING, rewardedAd.getResponseInfo());
                 }
 
                 @Override
                 public void onAdImpression() {
-                  sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_IMPRESSION_RECORDED);
+                  sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_IMPRESSION_RECORDED, rewardedAd.getResponseInfo());
                 }
 
                 @Override
                 public void onAdClicked() {
-                  sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_CLICKED);
+                  sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_CLICKED, rewardedAd.getResponseInfo());
                 }
 
               });
@@ -858,7 +933,7 @@ public class AdmobJNI implements LifecycleObserver {
           view.setOnPaidEventListener(new OnPaidEventListener() {
             @Override
             public void onPaidEvent(AdValue adValue) {
-              sendPaidEventMessage(MSG_BANNER, adValue);
+              sendPaidEventMessage(MSG_BANNER, adValue, view.getResponseInfo());
             }
           });
           view.setAdListener(new AdListener() {
@@ -870,6 +945,7 @@ public class AdmobJNI implements LifecycleObserver {
                 bannerAdView = view;
                 createLayout();
               }
+              logWinningAdapter("Banner loaded", view.getResponseInfo());
               sendSimpleMessage(MSG_BANNER, EVENT_LOADED, "height", bannerHeight, "width", bannerWidth);
             }
 
@@ -886,14 +962,15 @@ public class AdmobJNI implements LifecycleObserver {
               // Code to be executed when an ad opens an overlay that
               // covers the screen.
               // Log.d(TAG, "onAdOpened");
-              sendSimpleMessage(MSG_BANNER, EVENT_OPENING);
+              logWinningAdapter("Banner opened", view.getResponseInfo());
+              sendSimpleMessage(MSG_BANNER, EVENT_OPENING, view.getResponseInfo());
             }
 
             @Override
             public void onAdClicked() {
               // Code to be executed when the user clicks on an ad.
               // Log.d(TAG, "onAdClicked");
-              sendSimpleMessage(MSG_BANNER, EVENT_CLICKED);
+              sendSimpleMessage(MSG_BANNER, EVENT_CLICKED, view.getResponseInfo());
             }
 
             @Override
@@ -906,7 +983,7 @@ public class AdmobJNI implements LifecycleObserver {
 
             @Override
             public void onAdImpression() {
-              sendSimpleMessage(MSG_BANNER, EVENT_IMPRESSION_RECORDED);
+              sendSimpleMessage(MSG_BANNER, EVENT_IMPRESSION_RECORDED, view.getResponseInfo());
             }
           });
           view.loadAd(adRequest);
