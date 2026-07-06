@@ -155,7 +155,6 @@ public class AdmobJNI implements LifecycleObserver {
     }
     return trimmed;
   }
-
   private void configureTestAdsIfNeeded(boolean testAdsInDebug) {
     if (!testAdsInDebug) {
       return;

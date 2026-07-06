@@ -53,7 +53,6 @@ DEPENDENCY_OVERRIDES = {
         "com.unity3d.ads:unity-ads": "com.unity3d.ads:unity-ads:4.16.6",
     },
 }
-
 LABEL_MAP = {
     "applovin": "AppLovin Android",
     "chartboost": "Chartboost Android",

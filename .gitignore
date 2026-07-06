@@ -16,4 +16,3 @@ builtins
 /.vscode
 *.eclipse.buildship.core.prefs
 __pycache__/
-*.pyc
