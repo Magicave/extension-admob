@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Fetch AdMob mediation adapter data for Android from the official "choose networks" page.
+Fetch AdMob mediation adapter data for Android from the official Next-Gen SDK page.
 """
+import json
 import re
 from html import unescape
 from pathlib import Path
@@ -12,10 +13,11 @@ import requests
 from bs4 import BeautifulSoup
 
 
-MAIN_URL = "https://developers.google.com/admob/android/choose-networks"
-FRAME_PREFIX = "/frame/admob/android/choose-networks"
-RELNOTES_URL = "https://developers.google.com/admob/android/rel-notes"
-APP_OPEN_URL = "https://developers.google.com/admob/android/app-open"
+MAIN_URL = "https://developers.google.com/admob/android/next-gen/mediation/choose-networks"
+FRAME_PREFIX = "/frame/admob/android/next-gen/mediation/choose-networks"
+RELNOTES_URL = "https://developers.google.com/admob/android/next-gen/rel-notes"
+APP_OPEN_URL = "https://developers.google.com/admob/android/next-gen/app-open"
+ANDROID_SDK_COORDINATE = "com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk"
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "extension-admob" / "manifests" / "android" / "build.gradle"
 EXT_PROPERTIES = ROOT / "extension-admob" / "ext.properties"
@@ -26,10 +28,12 @@ LIFECYCLE_FALLBACK = "2.8.3"
 # Map the "name" attribute used in the HTML checkboxes to the ext.properties key.
 NETWORK_MAP = {
     "appLovin": "applovin",
+    "bidmachine": "bidmachine",
     "chartboost": "chartboost",
     "fyber": "dt_exchange",
     "imobile": "imobile",
     "inmobi": "inmobi",
+    "ironsource": "ironsource",
     "vungle": "liftoff",
     "line": "line",
     "maio": "maio",
@@ -47,18 +51,14 @@ EXTRA_REPOS = {
     "chartboost": ["maven { url 'https://cboost.jfrog.io/artifactory/chartboost-ads/' }"],
 }
 
-DEPENDENCY_OVERRIDES = {
-    # Keep the fork's newer Unity Ads SDK until Google's chooser catches up.
-    "unity": {
-        "com.unity3d.ads:unity-ads": "com.unity3d.ads:unity-ads:4.16.6",
-    },
-}
 LABEL_MAP = {
     "applovin": "AppLovin Android",
+    "bidmachine": "BidMachine Android",
     "chartboost": "Chartboost Android",
     "dt_exchange": "DT Exchange Android",
     "imobile": "i-mobile Android",
     "inmobi": "InMobi Android",
+    "ironsource": "ironSource Android",
     "liftoff": "Liftoff Monetize (Vungle) Android",
     "line": "Line Ads Android",
     "maio": "maio Android",
@@ -70,6 +70,11 @@ LABEL_MAP = {
     "pubmatic": "PubMatic Android",
     "unity": "Unity Ads Android",
 }
+
+# Keep adapters in the generated Gradle template while withholding their
+# settings when they are deliberately disabled for extension users.
+DISABLED_PROPERTY_KEYS = {"chartboost"}
+
 
 def collapse_blank_lines(lines: List[str]) -> List[str]:
     collapsed: List[str] = []
@@ -103,7 +108,7 @@ def version_key(v: str):
 def read_current_android_version() -> str:
     if not OUTPUT.exists():
         return ""
-    m = re.search(r"com\.google\.android\.gms:play-services-ads:([0-9.]+)", OUTPUT.read_text())
+    m = re.search(rf"{re.escape(ANDROID_SDK_COORDINATE)}:([0-9.]+)", OUTPUT.read_text())
     return m.group(1) if m else ""
 
 
@@ -182,39 +187,21 @@ def clean_dependencies(raw: str) -> List[str]:
     return deps
 
 
-def apply_dependency_overrides(key: str, dependencies: List[str]) -> List[str]:
-    overrides = DEPENDENCY_OVERRIDES.get(key)
-    if not overrides:
-        return dependencies
-
-    updated: List[str] = []
-    for dependency in dependencies:
-        replacement = dependency
-        for prefix, override in overrides.items():
-            if dependency.startswith(f"{prefix}:"):
-                replacement = override
-                break
-        updated.append(replacement)
-    return updated
-
-
 def parse_frame(html: str) -> Dict[str, Dict[str, object]]:
     soup = BeautifulSoup(html, "html.parser")
     results: Dict[str, Dict[str, object]] = {}
     found_names = set()
-    unsupported_names = set()
     for inp in soup.select("input[type='checkbox']"):
         name_attr = inp.get("name")
         if not name_attr:
             continue
+        found_names.add(name_attr)
         key = NETWORK_MAP.get(name_attr)
         if not key:
-            unsupported_names.add(name_attr)
-            continue
-        found_names.add(name_attr)
+            raise RuntimeError(f"Missing NETWORK_MAP entry for adapter name '{name_attr}'")
         version = (inp.get("value") or "").strip()
         repos = clean_repositories(inp.get("data-repositories", ""))
-        dependencies = apply_dependency_overrides(key, clean_dependencies(inp.get("data-dependencies", "")))
+        dependencies = clean_dependencies(inp.get("data-dependencies", ""))
         results[key] = {
             "display_name": name_attr,
             "version": version,
@@ -224,15 +211,16 @@ def parse_frame(html: str) -> Dict[str, Dict[str, object]]:
     missing = set(NETWORK_MAP.keys()) - found_names
     if missing:
         print(f"WARNING: NETWORK_MAP contains entries not present on AdMob site (assumed removed): {sorted(missing)}\n"
-              f"Update NETWORK_MAP in updater/android.py after checking https://developers.google.com/admob/android/choose-networks")
-    if unsupported_names:
-        print(f"WARNING: Ignoring unsupported adapters from AdMob site: {sorted(unsupported_names)}\n"
-              f"Review NETWORK_MAP in updater/android.py if you want to expose them.")
+              f"Update NETWORK_MAP in updater/android.py after checking {MAIN_URL}")
+    added = found_names - set(NETWORK_MAP.keys())
+    if added:
+        raise RuntimeError(f"New adapters on AdMob site not in NETWORK_MAP: {sorted(added)}\n"
+                           f"Please update NETWORK_MAP in updater/android.py (see {MAIN_URL})")
     return results
 
 
 def render_gradle(data: Dict[str, Dict[str, object]], sdk_info: Dict[str, str], lifecycle_version: str) -> str:
-    play_services_version = sdk_info["version"]
+    ads_mobile_sdk_version = sdk_info["version"]
     lines: List[str] = []
     lines.append("// Auto-generated by updater/android.py. Do not edit by hand.")
     lines.append("repositories {")
@@ -247,8 +235,13 @@ def render_gradle(data: Dict[str, Dict[str, object]], sdk_info: Dict[str, str], 
             lines.append(f"  {{{{/admob.{key}_android}}}}")
     lines.append("}")
     lines.append("")
+    lines.append("configurations.configureEach {")
+    lines.append('  exclude group: "com.google.android.gms", module: "play-services-ads"')
+    lines.append('  exclude group: "com.google.android.gms", module: "play-services-ads-lite"')
+    lines.append("}")
+    lines.append("")
     lines.append("dependencies {")
-    lines.append(f"  implementation \"com.google.android.gms:play-services-ads:{play_services_version}\"")
+    lines.append(f'  implementation "{ANDROID_SDK_COORDINATE}:{ads_mobile_sdk_version}"')
     lines.append(f"  implementation \"androidx.lifecycle:lifecycle-common:{lifecycle_version}\"")
     lines.append(f"  implementation \"androidx.lifecycle:lifecycle-process:{lifecycle_version}\"")
     lines.append(f"  annotationProcessor \"androidx.lifecycle:lifecycle-compiler:{lifecycle_version}\"")
@@ -290,7 +283,7 @@ def rewrite_ext_properties(data: Dict[str, Dict[str, object]]) -> None:
         insert_index = len(preserved)
 
     new_block: List[str] = []
-    for key in sorted(data.keys()):
+    for key in sorted(key for key in data.keys() if key not in DISABLED_PROPERTY_KEYS):
         prop = f"{key}_android"
         label = LABEL_MAP.get(key, f"{key.replace('_', ' ').title()} Android")
         new_block.append(f"{prop}.type = bool")

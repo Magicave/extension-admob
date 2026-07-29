@@ -301,7 +301,6 @@ static void LuaInit(lua_State* L)
     SETCONSTANT(SIZE_LARGE_BANNER)
     SETCONSTANT(SIZE_LEADEARBOARD)
     SETCONSTANT(SIZE_MEDIUM_RECTANGLE)
-    SETCONSTANT(SIZE_SMART_BANNER)
     SETCONSTANT(SIZE_LARGE_ADAPTIVE_BANNER)
 
     SETCONSTANT(POS_NONE)
@@ -337,8 +336,8 @@ static dmExtension::Result InitializeAdmob(dmExtension::Params* params)
 {
     dmLogInfo("InitializeAdmob");
     LuaInit(params->m_L);
-    Initialize_Ext(params, DEFOLD_USERAGENT);
     InitializeCallback();
+    Initialize_Ext(params, DEFOLD_USERAGENT);
     return dmExtension::RESULT_OK;
 }
 
