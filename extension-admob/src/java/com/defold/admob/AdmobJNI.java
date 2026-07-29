@@ -33,10 +33,12 @@ import com.google.android.libraries.ads.mobile.sdk.banner.BannerAdRequest;
 import com.google.android.libraries.ads.mobile.sdk.common.AdInspectorError;
 import com.google.android.libraries.ads.mobile.sdk.common.AdLoadCallback;
 import com.google.android.libraries.ads.mobile.sdk.common.AdRequest;
+import com.google.android.libraries.ads.mobile.sdk.common.AdValue;
 import com.google.android.libraries.ads.mobile.sdk.common.FullScreenContentError;
 import com.google.android.libraries.ads.mobile.sdk.common.LoadAdError;
 import com.google.android.libraries.ads.mobile.sdk.common.OnAdInspectorClosedListener;
 import com.google.android.libraries.ads.mobile.sdk.common.RequestConfiguration;
+import com.google.android.libraries.ads.mobile.sdk.common.ResponseInfo;
 import com.google.android.libraries.ads.mobile.sdk.initialization.AdapterStatus;
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationConfig;
 import com.google.android.libraries.ads.mobile.sdk.initialization.InitializationStatus;
@@ -405,6 +407,54 @@ public class AdmobJNI implements LifecycleObserver {
         String.format("Error code: \"%s\". %s", error.getCode(), error.getMessage()));
   }
 
+  private String normalizeAdNetworkId(String adapterClass) {
+    if (adapterClass == null || adapterClass.length() == 0) {
+      return null;
+    }
+
+    String lower = adapterClass.toLowerCase();
+    if (lower.contains(".unity.") || lower.contains("unitymediationadapter") ||
+        lower.contains("unityadapter") || lower.contains("unityads")) {
+      return "unity";
+    }
+    if (lower.contains(".admob.") || lower.endsWith(".mobileads") ||
+        lower.contains("admobadapter")) {
+      return "googleadmob";
+    }
+    return adapterClass;
+  }
+
+  private void putAdNetworkFields(JSONObject obj, ResponseInfo responseInfo) throws JSONException {
+    if (responseInfo == null) {
+      return;
+    }
+
+    String adapterClass = responseInfo.getMediationAdapterClassName();
+    if (adapterClass == null || adapterClass.length() == 0) {
+      return;
+    }
+
+    obj.put("ad_network_adapter", adapterClass);
+    obj.put("ad_network_id", normalizeAdNetworkId(adapterClass));
+  }
+
+  private void sendPaidEventMessage(int msg, AdValue adValue, ResponseInfo responseInfo) {
+    String message = null;
+    try {
+      JSONObject obj = new JSONObject();
+      obj.put("event", EVENT_PAID_EVENT);
+      obj.put("event_type", "paid_event");
+      obj.put("value_micros", adValue.getValueMicros());
+      obj.put("currency", adValue.getCurrencyCode());
+      obj.put("precision", adValue.getPrecisionType().ordinal());
+      putAdNetworkFields(obj, responseInfo);
+      message = obj.toString();
+    } catch (JSONException e) {
+      message = getJsonConversionErrorMessage(e.getLocalizedMessage());
+    }
+    admobAddToQueue(msg, message);
+  }
+
   private AdRequest createAdRequest(String unitId) {
     return new AdRequest.Builder(unitId).setRequestAgent(defoldUserAgent).build();
   }
@@ -461,7 +511,8 @@ public class AdmobJNI implements LifecycleObserver {
 
     Log.d(TAG, "Showing app open ad.");
     mIsShowingAppOpenAd = true;
-    mAppOpenAd.setAdEventCallback(
+    final AppOpenAd appOpenAd = mAppOpenAd;
+    appOpenAd.setAdEventCallback(
         new AppOpenAdEventCallback() {
 
           @Override
@@ -531,8 +582,13 @@ public class AdmobJNI implements LifecycleObserver {
               }
             });
           }
+
+          @Override
+          public void onAdPaid(@NonNull AdValue adValue) {
+            sendPaidEventMessage(MSG_APPOPEN, adValue, appOpenAd.getResponseInfo());
+          }
         });
-    mAppOpenAd.show(activity);
+    appOpenAd.show(activity);
   }
 
   // Load an app open ad with the provided ad unit id, optionally also showing it
@@ -662,6 +718,11 @@ public class AdmobJNI implements LifecycleObserver {
                   public void onAdClicked() {
                     sendSimpleMessage(MSG_INTERSTITIAL, EVENT_CLICKED);
                   }
+
+                  @Override
+                  public void onAdPaid(@NonNull AdValue adValue) {
+                    sendPaidEventMessage(MSG_INTERSTITIAL, adValue, interstitialAd.getResponseInfo());
+                  }
                 });
               }
             });
@@ -765,6 +826,11 @@ public class AdmobJNI implements LifecycleObserver {
                   @Override
                   public void onAdClicked() {
                     sendSimpleMessage(MSG_REWARDED, EVENT_CLICKED);
+                  }
+
+                  @Override
+                  public void onAdPaid(@NonNull AdValue adValue) {
+                    sendPaidEventMessage(MSG_REWARDED, adValue, rewardedAd.getResponseInfo());
                   }
                 });
               }
@@ -873,6 +939,11 @@ public class AdmobJNI implements LifecycleObserver {
                   public void onAdClicked() {
                     sendSimpleMessage(MSG_REWARDED_INTERSTITIAL, EVENT_CLICKED);
                   }
+
+                  @Override
+                  public void onAdPaid(@NonNull AdValue adValue) {
+                    sendPaidEventMessage(MSG_REWARDED_INTERSTITIAL, adValue, rewardedAd.getResponseInfo());
+                  }
                 });
               }
             });
@@ -977,6 +1048,11 @@ public class AdmobJNI implements LifecycleObserver {
               @Override
               public void onAdImpression() {
                 sendSimpleMessage(MSG_BANNER, EVENT_IMPRESSION_RECORDED);
+              }
+
+              @Override
+              public void onAdPaid(@NonNull AdValue adValue) {
+                sendPaidEventMessage(MSG_BANNER, adValue, bannerAd.getResponseInfo());
               }
             });
             bannerAd.setBannerAdRefreshCallback(new BannerAdRefreshCallback() {
