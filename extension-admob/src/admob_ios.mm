@@ -471,7 +471,6 @@ namespace dmAdmob {
             bannerSize = GADAdSizeMediumRectangle;
             break;
           case SIZE_FLUID:
-          case SIZE_SMART_BANNER:
           default:
             break;
         }

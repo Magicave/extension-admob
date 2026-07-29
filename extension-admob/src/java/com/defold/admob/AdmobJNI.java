@@ -56,6 +56,7 @@ import com.google.android.libraries.ads.mobile.sdk.rewardedinterstitial.Rewarded
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.json.JSONObject;
@@ -91,6 +92,7 @@ public class AdmobJNI implements LifecycleObserver {
   private static final int EVENT_IMPRESSION_RECORDED =12;
   // 13-16 are for iOS only
   private static final int EVENT_NOT_SUPPORTED =      17;
+  private static final int EVENT_PAID_EVENT =          18;
 
   private static final int SIZE_ADAPTIVE_BANNER =     0;
   private static final int SIZE_BANNER =              1;
@@ -412,7 +414,7 @@ public class AdmobJNI implements LifecycleObserver {
       return null;
     }
 
-    String lower = adapterClass.toLowerCase();
+    String lower = adapterClass.toLowerCase(Locale.ROOT);
     if (lower.contains(".unity.") || lower.contains("unitymediationadapter") ||
         lower.contains("unityadapter") || lower.contains("unityads")) {
       return "unity";
@@ -446,7 +448,7 @@ public class AdmobJNI implements LifecycleObserver {
       obj.put("event_type", "paid_event");
       obj.put("value_micros", adValue.getValueMicros());
       obj.put("currency", adValue.getCurrencyCode());
-      obj.put("precision", adValue.getPrecisionType());
+      obj.put("precision", adValue.getPrecisionType().ordinal());
       putAdNetworkFields(obj, responseInfo);
       message = obj.toString();
     } catch (JSONException e) {

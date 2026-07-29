@@ -120,11 +120,6 @@ void AddToQueueCallback(MessageId type, const char*json)
 
 void UpdateCallback()
 {
-    if (m_callbacksQueue.Empty())
-    {
-        return;
-    }
-
     if (!dmScript::IsCallbackValid(m_luaCallback))
     {
         return;
