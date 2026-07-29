@@ -235,11 +235,6 @@ def render_gradle(data: Dict[str, Dict[str, object]], sdk_info: Dict[str, str], 
             lines.append(f"  {{{{/admob.{key}_android}}}}")
     lines.append("}")
     lines.append("")
-    lines.append("configurations.configureEach {")
-    lines.append('  exclude group: "com.google.android.gms", module: "play-services-ads"')
-    lines.append('  exclude group: "com.google.android.gms", module: "play-services-ads-lite"')
-    lines.append("}")
-    lines.append("")
     lines.append("dependencies {")
     lines.append(f'  implementation "{ANDROID_SDK_COORDINATE}:{ads_mobile_sdk_version}"')
     lines.append(f"  implementation \"androidx.lifecycle:lifecycle-common:{lifecycle_version}\"")
@@ -252,7 +247,10 @@ def render_gradle(data: Dict[str, Dict[str, object]], sdk_info: Dict[str, str], 
             continue
         lines.append(f"  {{{{#admob.{key}_android}}}}")
         for dep in deps:
-            lines.append(f"  implementation '{dep}'")
+            lines.append(f"  implementation('{dep}') {{")
+            lines.append('    exclude group: "com.google.android.gms", module: "play-services-ads"')
+            lines.append('    exclude group: "com.google.android.gms", module: "play-services-ads-lite"')
+            lines.append("  }")
         lines.append(f"  {{{{/admob.{key}_android}}}}")
         lines.append("")
     if lines[-1] == "":
