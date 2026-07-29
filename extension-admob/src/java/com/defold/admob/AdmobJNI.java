@@ -429,7 +429,7 @@ public class AdmobJNI implements LifecycleObserver {
       return;
     }
 
-    String adapterClass = responseInfo.getMediationAdapterClassName();
+    String adapterClass = responseInfo.getAdapterClassName();
     if (adapterClass == null || adapterClass.length() == 0) {
       return;
     }
@@ -446,7 +446,7 @@ public class AdmobJNI implements LifecycleObserver {
       obj.put("event_type", "paid_event");
       obj.put("value_micros", adValue.getValueMicros());
       obj.put("currency", adValue.getCurrencyCode());
-      obj.put("precision", adValue.getPrecisionType().ordinal());
+      obj.put("precision", adValue.getPrecisionType());
       putAdNetworkFields(obj, responseInfo);
       message = obj.toString();
     } catch (JSONException e) {

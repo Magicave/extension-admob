@@ -99,7 +99,7 @@ namespace dmAdmob {
         [dict setObject:@"paid_event" forKey:@"event_type"];
         [dict setObject:[NSNumber numberWithDouble:[value.value doubleValue]] forKey:@"revenue_ios_double"];
         [dict setObject:value.currencyCode forKey:@"currency"];
-        [dict setObject:[NSNumber numberWithInt:value.precision] forKey:@"precision"];
+        [dict setObject:[NSNumber numberWithInteger:value.precision] forKey:@"precision"];
         SendSimpleMessage(msg, dict);
     }
 
